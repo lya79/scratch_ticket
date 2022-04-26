@@ -1,6 +1,9 @@
 const { ccclass, property } = cc._decorator;
 const CALC_RECT_WIDTH = 40;
+const CALC_RECT_HEIGHT = 40;
 const CLEAR_LINE_WIDTH = 40;
+
+// XXX angus:需要優化刮開的判斷, 目前使用點判斷, 會導致部分已經刮開卻沒判斷到.
 
 @ccclass
 export default class Scratch_ticket extends cc.Component {
@@ -61,13 +64,15 @@ export default class Scratch_ticket extends cc.Component {
   tempDrawPoints: cc.Vec2[] = [];
   clearMask(pos) {
     let mask: any = this.maskNode.getComponent(cc.Mask);
-    let stencil = mask._graphics;
+    let stencil: cc.Graphics = mask._graphics;
     const len = this.tempDrawPoints.length;
     this.tempDrawPoints.push(pos);
 
+    let lineWidth = 1;
+
     if (len <= 1) {
       // 只有一个点，用圆来清除涂层
-      stencil.circle(pos.x, pos.y, CLEAR_LINE_WIDTH / 2);
+      stencil.rect(pos.x - (lineWidth / 2), pos.y - (CLEAR_LINE_WIDTH / 2), lineWidth, CLEAR_LINE_WIDTH);
       stencil.fill();
 
       // 记录点所在的格子
@@ -85,10 +90,8 @@ export default class Scratch_ticket extends cc.Component {
       stencil.moveTo(prevPos.x, prevPos.y);
       stencil.lineTo(curPos.x, curPos.y);
       stencil.lineWidth = CLEAR_LINE_WIDTH;
-      stencil.lineCap = cc.Graphics.LineCap.ROUND;
-      stencil.lineJoin = cc.Graphics.LineJoin.ROUND;
       stencil.strokeColor = cc.color(255, 255, 255, 255);
-      stencil.stroke(); // TODO 刮刮樂紋路
+      stencil.stroke();
 
       // 记录线段经过的格子
       this.polygonPointsList.forEach((item) => {
@@ -100,7 +103,7 @@ export default class Scratch_ticket extends cc.Component {
   polygonPointsList: { rect: cc.Rect; isHit: boolean }[] = [];
   reset() {
     let mask: any = this.maskNode.getComponent(cc.Mask);
-    if (mask._graphics){
+    if (mask._graphics) {
       mask._graphics.clear();
     }
 
@@ -109,14 +112,47 @@ export default class Scratch_ticket extends cc.Component {
     this.progerss.string = '已經刮開 0%';
     this.ticketNode.getComponent(cc.Graphics).clear();
 
-    // 生成小格子，用来辅助统计涂层的刮开比例
-    for (let x = 0; x < this.ticketNode.width; x += CALC_RECT_WIDTH) {
-      for (let y = 0; y < this.ticketNode.height; y += CALC_RECT_WIDTH) {
-        this.polygonPointsList.push({
-          rect: cc.rect(x - this.ticketNode.width / 2, y - this.ticketNode.height / 2, CALC_RECT_WIDTH, CALC_RECT_WIDTH),
-          isHit: false
-        });
+    {// debug用途
+      let arr: cc.Node[] = new Array();
+      for (let i = 0; i < this.ticketNode.children.length; i++) {
+        let node: cc.Node = this.ticketNode.children[i];
+        if (node.name == "debugNode") {
+          arr.push(node);
+        }
+      }
+      for (let i = 0; i < arr.length; i++) {
+        arr[i].destroy();
       }
     }
+
+    // 判斷點的間距
+    let rectW = 20;
+    let rectH = 20;
+
+    // 生成小格子，用来辅助统计涂层的刮开比例
+    let sum = 0;
+    for (let x = 0; x < this.ticketNode.width; x += rectW) {
+      for (let y = 0; y < this.ticketNode.height; y += rectH) {
+        sum += 1;
+        this.polygonPointsList.push({
+          rect: cc.rect(x - this.ticketNode.width / 2, y - this.ticketNode.height / 2, rectW, rectH),
+          isHit: false
+        });
+
+        {// debug用途
+          let node: cc.Node = new cc.Node("debugNode");
+
+          var graphics = node.addComponent(cc.Graphics);
+          // graphics.circle(x - this.ticketNode.width / 2, y - this.ticketNode.height / 2, 5);
+          graphics.rect(x - this.ticketNode.width / 2, y - this.ticketNode.height / 2, rectW, rectH);
+          graphics.fillColor = cc.color(255, 0, 0, 50);
+          graphics.stroke();
+          graphics.fill();
+
+          // this.ticketNode.addChild(node);
+        }
+      }
+    }
+    cc.log("總共 " + sum + "個判斷點");
   }
 }

@@ -41,8 +41,8 @@
     },
     "_scale": {
       "__type__": "cc.Vec3",
-      "x": 0.5323070688252404,
-      "y": 0.5323070688252404,
+      "x": 0.38165225744893805,
+      "y": 0.38165225744893805,
       "z": 1
     },
     "_quat": {
@@ -344,7 +344,7 @@
     },
     "_position": {
       "__type__": "cc.Vec3",
-      "x": 4,
+      "x": 0,
       "y": -37,
       "z": 0
     },
@@ -426,8 +426,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 486,
-      "height": 234
+      "width": 128,
+      "height": 178
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -437,7 +437,7 @@
     "_position": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": -42,
+      "y": -37,
       "z": 0
     },
     "_scale": {
@@ -644,8 +644,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 486,
-      "height": 234
+      "width": 128,
+      "height": 178
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -732,7 +732,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 160,
+      "width": 120,
       "height": 40
     },
     "_anchorPoint": {
@@ -777,7 +777,7 @@
     "_useOriginalSize": false,
     "_string": "刮開區域",
     "_N$string": "刮開區域",
-    "_fontSize": 40,
+    "_fontSize": 30,
     "_lineHeight": 40,
     "_enableWrapText": true,
     "_N$file": null,
@@ -870,8 +870,8 @@
     },
     "_position": {
       "__type__": "cc.Vec3",
-      "x": 0,
-      "y": -273,
+      "x": -13,
+      "y": 115,
       "z": 0
     },
     "_scale": {
@@ -959,8 +959,8 @@
     },
     "_position": {
       "__type__": "cc.Vec3",
-      "x": 218,
-      "y": -274,
+      "x": -10,
+      "y": 166,
       "z": 0
     },
     "_scale": {
