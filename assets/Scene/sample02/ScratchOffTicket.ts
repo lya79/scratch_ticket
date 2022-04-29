@@ -47,13 +47,16 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private debugShowTouchPointClass = { show: false, color: cc.Color.RED, size: 1 }; // 顯示觸碰產生的碰撞點
     private debugShowItemPointClass = { show: false, color: cc.Color.BLUE, size: 3 }; // 顯示項目的碰撞點
     private debugShowCollisionPointClass = { show: false, color: cc.Color.BLACK, size: 5 }; // 顯示項目和觸碰的碰撞點
+    private debugShowCardPointClass = { show: false, color: cc.Color.RED, size: 5 }; // 顯示項目和觸碰的碰撞點
 
     // 碰撞相關變數
+    private readonly SPACING_OF_POINT_CARD = 70; // 卡片碰撞點的間距
     private readonly SPACING_OF_POINT_ITEM = 10; // 項目判斷點產生的間距
     private readonly SPACING_OF_POINT_TOUCH = 10; // 刮除線段的碰撞點間距
     private readonly LENGTH_LINE_TOUCH = 50; // 線段長度
     private readonly LENGTH_LINE_TOUCH_21 = (50 / 2); // 線段長度的一半
-    private readonly DIFF_COLLISION = 10; // 觸碰點和項目點之間允許的碰撞誤差
+    private readonly DIFF_COLLISION_ITEM = 10; // 觸碰點和項目點之間允許的碰撞誤差
+    private readonly DIFF_COLLISION_CARD = 30; // 觸碰點和卡片點之間允許的碰撞誤差
 
     // 選項變數
     private showCoin: boolean;
@@ -62,6 +65,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private items: Map<number, Collision>; // key: 放置位置, value:等待刮開的項目
     private itemHandler: IItemHandler;
     private imageScrap: cc.SpriteFrame;
+    private cardPoints: Collision; // 整張卡片的碰撞點(為了用來判斷碎屑產生)
 
     private coinNode: cc.Node;
 
@@ -69,6 +73,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private tmpDrawPoints: cc.Vec2[]; // 暫存刮除時的觸碰點
     private tmpLastPoint: cc.Vec2; // 暫存最後的刮除位置
     private tmpScrapPoints: cc.Vec2[]; // 暫存有實際刮除到遮罩時的觸碰點
+
     // private tmpCountUpdate = 0; // 計時 update次數
 
     init() {
@@ -82,11 +87,16 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         this.tmpScrapPoints = [];
         this.tmpLastPoint = new cc.Vec2();
 
+        this.cardPoints = new Collision();
+        this.cardPoints.Collision = [];
+        this.cardPoints.Point = [];
+
         // 初始化錢幣位置到畫面之外
         this.tmpLastPoint.x = -3000;
         this.tmpLastPoint.y = -3000;
 
         this.coinNode = this.node.getChildByName("coin");
+        this.coinNode.zIndex = 1; // 為了讓後續才加入的 node能夠顯示在 coin node底下
 
         this.SetItems(null);
 
@@ -287,43 +297,45 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
 
         if (this.showScrap && this.tmpScrapPoints.length > 0) { // 產生碎屑動畫 // XXX 使用 prefab改善效能
-            this.node.getChildByName("coin").zIndex = 1;
+            let len = this.tmpScrapPoints.length;
 
-            let point = this.tmpScrapPoints.shift();
+            for (let k = 0; k < len; k++) {
+                let point = this.tmpScrapPoints.shift();
 
-            let scrapNode = new cc.Node("scrapNode");
-            scrapNode.setContentSize(this.imageScrap.getRect().size);
-            scrapNode.setPosition(point);
-            scrapNode.x = point.x + this.getRandomInt(30);
-            scrapNode.y = point.y;
-            scrapNode.scale = 1;
-            scrapNode.rotation = 0;
-            scrapNode.addComponent(cc.Sprite).spriteFrame = this.imageScrap;
-            this.node.addChild(scrapNode)
+                let scrapNode = new cc.Node("scrapNode");
+                scrapNode.setContentSize(this.imageScrap.getRect().size);
+                scrapNode.setPosition(point);
+                scrapNode.x = point.x + this.getRandomInt(20);
+                scrapNode.y = point.y;
+                scrapNode.scale = 1;
+                scrapNode.rotation = 0;
+                scrapNode.addComponent(cc.Sprite).spriteFrame = this.imageScrap;
+                this.node.addChild(scrapNode)
 
-            let targetY = point.y - this.node.convertToWorldSpaceAR(point).y - scrapNode.height;
-            let targetX = this.getRandomInt(30);
-            targetX *= (this.getRandomInt(2) == 0 ? 1 : -1);
-            targetX += scrapNode.x;
+                let targetY = point.y - this.node.convertToWorldSpaceAR(point).y - scrapNode.height;
+                let targetX = this.getRandomInt(20);
+                targetX *= (this.getRandomInt(2) == 0 ? 1 : -1);
+                targetX += scrapNode.x;
 
-            let targetScale = 1.5;
+                let targetScale = 1.5;
 
-            let tween = cc.tween(scrapNode);
-            tween.then(cc.tween()
-                .to(0.2, { scale: targetScale, position: new cc.Vec2(targetX, targetY) })
-                .call(() => { scrapNode.destroy(); })
-            );
+                let tween = cc.tween(scrapNode);
+                tween.then(cc.tween()
+                    .to(0.2, { scale: targetScale, position: new cc.Vec2(targetX, targetY) })
+                    .call(() => { scrapNode.destroy(); })
+                );
 
-            tween.start();
+                tween.start();
+            }
         }
     }
 
     getRandomInt(max) {
         return Math.floor(Math.random() * max);
-    }
 
-    // console.log(getRandomInt(3));
-    // expected output: 0, 1 or 2
+        // console.log(getRandomInt(3));
+        // expected output: 0, 1 or 2
+    }
 
     SetScrap(image: cc.SpriteFrame) {
         this.imageScrap = image;
@@ -353,6 +365,36 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
 
         this.tmpDrawPoints = [];
         this.tmpScrapPoints = [];
+        this.cardPoints.Collision = [];
+        this.cardPoints.Point = [];
+
+        { // 產生卡片碰撞點
+            let drawPointFunc = function (x: number, y: number, color: cc.Color, size: number, parentNode: cc.Node) {
+                let node: cc.Node = new cc.Node("debugNode");
+                var graphics = node.addComponent(cc.Graphics);
+                graphics.circle(x, y, size);
+                graphics.fillColor = color;
+                graphics.stroke();
+                graphics.fill();
+                parentNode.addChild(node);
+            }
+
+            let cardWidth = ticketNode.width;
+            let cardHeight = ticketNode.height;
+            let cardWidthHalf = cardWidth / 2;
+            let cardHeightHalf = cardHeight / 2;
+
+            for (let x = -cardWidthHalf; x <= cardWidthHalf; x += this.SPACING_OF_POINT_CARD) {
+                for (let y = -cardHeightHalf; y <= cardHeightHalf; y += this.SPACING_OF_POINT_CARD) {
+                    this.cardPoints.Point.push(new cc.Vec2(x, y));
+                    this.cardPoints.Collision.push(false);
+
+                    if (this.debugShowCardPointClass.show) {
+                        drawPointFunc(x, y, this.debugShowCardPointClass.color, this.debugShowCardPointClass.size, ticketNode);
+                    }
+                }
+            }
+        }
     }
 
     private clearByPos(touchAction: ETouchAction, pos: cc.Vec2) {
@@ -365,12 +407,25 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
 
         this.tmpDrawPoints.push(pos);
 
-        {// 暫存刮除點的位置 // XXX 已經刮除過的位置不可以掉碎屑
-            this.tmpScrapPoints.push(new cc.Vec2(pos.x, pos.y));
-        }
-
         if (len <= 1) {
             return;
+        }
+
+        {// 暫存刮除點的位置(已經刮除過的位置不可以掉碎屑)
+            for (let k = 0; k < this.cardPoints.Collision.length; k++) {
+                if (this.cardPoints.Collision[k]) {
+                    continue;
+                }
+
+                let distance = this.getDistance(this.cardPoints.Point[k], pos);
+                if (distance >= this.DIFF_COLLISION_CARD) { // 允許的碰撞誤差
+                    continue;
+                }
+
+                this.cardPoints.Collision[k] = true;
+
+                this.tmpScrapPoints.push(new cc.Vec2(this.cardPoints.Point[k].x, this.cardPoints.Point[k].y));
+            }
         }
 
         let ticketNode = this.node.getChildByName("ticket");
@@ -443,10 +498,14 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
                 let item = entry[1]; // value
 
                 for (let k = 0; k < item.Point.length; k++) {
+                    if (item.Collision[k]) {
+                        continue;
+                    }
+
                     let itemPoint = item.Point[k];
 
                     let distance = this.getDistance(itemPoint, touchPoint);
-                    if (distance >= this.DIFF_COLLISION) { // 允許的碰撞誤差
+                    if (distance >= this.DIFF_COLLISION_ITEM) { // 允許的碰撞誤差
                         continue;
                     }
 
