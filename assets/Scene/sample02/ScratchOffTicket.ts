@@ -6,9 +6,14 @@ export enum ETouchAction {
     END,
 }
 
+export enum EAudioAction {
+    SCRATCH,
+}
+
 export interface IItemHandler {
     ItemListener: (items: Map<number, number>) => void;
     GetImageHandler: (pos: number) => cc.SpriteFrame;
+    PlayAudio: (action: EAudioAction) => void;
 }
 
 class Collision {
@@ -74,7 +79,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private tmpLastPoint: cc.Vec2; // 暫存最後的刮除位置
     private tmpScrapPoints: cc.Vec2[]; // 暫存有實際刮除到遮罩時的觸碰點
 
-    // private tmpCountUpdate = 0; // 計時 update次數
+
 
     init() {
         this.showCoin = false; // 預設不顯顯示硬幣
@@ -284,20 +289,35 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         this.tmpLastPoint.y = point.y;
     }
 
+    // private tmpCountUpdate = 0; // 計時 update次數
+
     protected update(dt: number): void {
-        // // 計時
-        // this.tmpCountUpdate += 1; 
-        // if (this.tmpCountUpdate < 1) {
-        //     return;
-        // }
-        // this.tmpCountUpdate = 0;
+        {
+            // // 計時
+            // this.tmpCountUpdate += 1;
+            // if (this.tmpCountUpdate < 1) {
+            //     return;
+            // }
+            // this.tmpCountUpdate = 0;
+
+            // 計時
+            // this.tmpCountUpdate += dt;
+            // if (this.tmpCountUpdate >= 0.2) {
+            //     this.tmpCountUpdate = 0;
+            // }
+        }
+
 
         if (this.showCoin) { // 更新錢幣位置
             this.coinNode.setPosition(this.tmpLastPoint.x, this.tmpLastPoint.y);
         }
 
-        if (this.showScrap && this.tmpScrapPoints.length > 0) { // 產生碎屑動畫 // XXX 使用 prefab改善效能
+        if (this.showScrap && this.tmpScrapPoints.length > 0) { // 產生碎屑動畫 // XXX 需要改善效能
             let len = this.tmpScrapPoints.length;
+
+            if (this.itemHandler) {
+                this.itemHandler.PlayAudio(EAudioAction.SCRATCH);
+            }
 
             for (let k = 0; k < len; k++) {
                 let point = this.tmpScrapPoints.shift();
@@ -397,11 +417,15 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
     }
 
-    private clearByPos(touchAction: ETouchAction, pos: cc.Vec2) {
+    private clearByPos(touchAction: ETouchAction, touchPos: cc.Vec2) {
         if (touchAction == ETouchAction.END) {
             this.tmpDrawPoints = [];
             return;
         }
+
+        let ticketNode = this.node.getChildByName("ticket");
+
+        let pos = ticketNode.convertToNodeSpaceAR(touchPos);
 
         const len = this.tmpDrawPoints.length;
 
@@ -428,7 +452,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             }
         }
 
-        let ticketNode = this.node.getChildByName("ticket");
+        // let ticketNode = this.node.getChildByName("ticket");
         let maskNode = ticketNode.getChildByName("mask");
 
         let mask: any = maskNode.getComponent(cc.Mask);

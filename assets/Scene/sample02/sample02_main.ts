@@ -1,4 +1,4 @@
-import { ScratchOffTicket, ETouchAction, IItemHandler } from "./ScratchOffTicket";
+import { ScratchOffTicket, ETouchAction, IItemHandler, EAudioAction } from "./ScratchOffTicket";
 
 const { ccclass, property } = cc._decorator;
 
@@ -22,23 +22,8 @@ export default class Sample02Main extends cc.Component { // TODO 要測試手機
     @property(cc.SpriteFrame)
     imagePos4: cc.SpriteFrame = null;
 
-    // @property(cc.AudioClip)
-    // audioLongScraps: cc.AudioClip = null;
-
-    // @property(cc.AudioClip)
-    // audioShortScraps1: cc.AudioClip = null;
-
-    // @property(cc.AudioClip)
-    // audioShortScraps2: cc.AudioClip = null;
-
-    // @property(cc.AudioClip)
-    // audioShortScraps3: cc.AudioClip = null;
-
-    // @property(cc.AudioClip)
-    // audioShortScraps4: cc.AudioClip = null;
-
-    // @property(cc.AudioClip)
-    // audioShortScraps5: cc.AudioClip = null;
+    @property({ type: cc.AudioClip })
+    audioScratch: cc.AudioClip[] = [];
 
     private scratchOffTicket: ScratchOffTicket;
 
@@ -53,20 +38,15 @@ export default class Sample02Main extends cc.Component { // TODO 要測試手機
 
             let progressNode = this.node.getChildByName("progress");
 
-
             let self = this;
-            class Methods implements IItemHandler {
-                private posAndImg = new Map<number, cc.SpriteFrame>();
 
-                constructor() {
-                    // 設定獎項位置對應的圖片
-                    this.posAndImg.set(1, self.imagePos1);
-                    this.posAndImg.set(2, self.imagePos2);
-                    this.posAndImg.set(3, self.imagePos3);
-                    this.posAndImg.set(4, self.imagePos4);
-                }
+            class Methods implements IItemHandler {
 
                 ItemListener(items: Map<number, number>) {
+                    if (!items) {
+                        return;
+                    }
+
                     for (let entry of Array.from(items.entries())) {
                         let pos = entry[0]; // key
                         let percentage = entry[1]; // value
@@ -80,14 +60,38 @@ export default class Sample02Main extends cc.Component { // TODO 要測試手機
                 }
 
                 GetImageHandler(pos: number): cc.SpriteFrame {
-                    cc.log("替換項目圖片 項目" + pos + ", 圖片:" + this.posAndImg.get(pos).name);
-                    return this.posAndImg.get(pos);
+                    let posAndImg = new Map<number, cc.SpriteFrame>(); // 設定獎項位置對應的圖片
+                    posAndImg.set(1, self.imagePos1);
+                    posAndImg.set(2, self.imagePos2);
+                    posAndImg.set(3, self.imagePos3);
+                    posAndImg.set(4, self.imagePos4);
+
+                    if (!posAndImg.has(pos)) {
+                        cc.log("error 替換項目圖片失敗 項目" + pos);
+                        return;
+                    }
+
+                    cc.log("替換項目圖片 項目" + pos + ", 圖片:" + posAndImg.get(pos).name);
+
+                    return posAndImg.get(pos);
+                }
+
+                PlayAudio(action: EAudioAction) {
+                    if (action == EAudioAction.SCRATCH) {
+                        let getRandomInt = function (max) {
+                            return Math.floor(Math.random() * max);
+                        }
+
+                        let idx = getRandomInt(self.audioScratch.length - 1) + 1; // audioScratch索引0是長度7秒的聲音(自動刮除使用)
+                        let clip: cc.AudioClip = self.audioScratch[idx];
+                        cc.audioEngine.playEffect(clip, false);
+
+                        // cc.log("播放刮除音效:" + clip.name);
+                    }
                 }
             }
 
-            itemHandler = new Methods();
-
-            this.scratchOffTicket.SetItemHandler(itemHandler);
+            this.scratchOffTicket.SetItemHandler(new Methods());
         }
 
         { // 設定刮刮樂錢幣
@@ -98,12 +102,8 @@ export default class Sample02Main extends cc.Component { // TODO 要測試手機
             this.scratchOffTicket.SetCoinNode(coinNode);
         }
 
-        { // TODO 設定刮刮樂刮除的動畫(已經刮除的區塊不會觸發產生粉末動畫)
+        { // 設定刮刮樂刮除的動畫(已經刮除的區塊不會觸發產生粉末動畫)
             this.scratchOffTicket.SetScrap(this.imageScraps);
-        }
-
-        { // TODO 設定刮刮樂音效(已經刮除的區塊不會觸發撥放音效)
-
         }
 
         {
@@ -174,29 +174,16 @@ export default class Sample02Main extends cc.Component { // TODO 要測試手機
     }
 
     touchStartEvent(event: cc.Event.EventTouch) {
-        let ticketNode = this.node.getChildByName("ticket").getChildByName("ticket");
-        let point = ticketNode.convertToNodeSpaceAR(event.getLocation());
-
-        this.scratchOffTicket.Scratch(
-            ETouchAction.START,
-            new cc.Vec2(point.x, point.y),
-        );
+        let point = new cc.Vec2(event.getLocation().x, event.getLocation().y);
+        this.scratchOffTicket.Scratch(ETouchAction.START, point);
     }
 
     touchMoveEvent(event: cc.Event.EventTouch) {
-        let ticketNode = this.node.getChildByName("ticket").getChildByName("ticket");
-        let point = ticketNode.convertToNodeSpaceAR(event.getLocation());
-
-        this.scratchOffTicket.Scratch(
-            ETouchAction.MOVE,
-            new cc.Vec2(point.x, point.y),
-        );
+        let point = new cc.Vec2(event.getLocation().x, event.getLocation().y);
+        this.scratchOffTicket.Scratch(ETouchAction.MOVE, point);
     }
 
     touchEndEvent() {
-        this.scratchOffTicket.Scratch(
-            ETouchAction.END,
-            null,
-        );
+        this.scratchOffTicket.Scratch(ETouchAction.END, null);
     }
 }
