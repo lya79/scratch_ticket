@@ -17,22 +17,16 @@ export interface IItemHandler {
 }
 
 class Collision {
-    Point: cc.Vec2[];
-    Collision: boolean[];
+    Points: Set<cc.Vec2>;
+    Total: number;
 
     constructor() {
-        this.Point = [];
-        this.Collision = [];
+        this.Points = new Set<cc.Vec2>();
+        this.Total = 0;
     }
 
     GetPercentage(): number {
-        let count = 0;
-        for (let i = 0; i < this.Collision.length; i++) {
-            if (this.Collision[i]) {
-                count += 1;
-            }
-        }
-        return Math.floor((count / this.Collision.length) * 100);
+        return Math.floor(((this.Total - this.Points.size) / this.Total) * 100);
     }
 }
 
@@ -49,10 +43,10 @@ interface IScratchOffTicket {
 export class ScratchOffTicket extends cc.Component implements IScratchOffTicket {
 
     // debug變數
-    private debugShowTouchPointClass = { show: true, color: cc.Color.RED, size: 1 }; // 顯示觸碰產生的碰撞點
-    private debugShowItemPointClass = { show: true, color: cc.Color.BLUE, size: 3 }; // 顯示項目的碰撞點
-    private debugShowCollisionPointClass = { show: true, color: cc.Color.BLACK, size: 5 }; // 顯示項目和觸碰的碰撞點
-    private debugShowCardPointClass = { show: true, color: cc.Color.RED, size: 5 }; // 顯示項目和觸碰的碰撞點
+    private debugShowTouchPointClass = { show: false, color: cc.Color.RED, size: 1 }; // 顯示觸碰產生的碰撞點
+    private debugShowItemPointClass = { show: false, color: cc.Color.BLUE, size: 3 }; // 顯示項目的碰撞點
+    private debugShowCollisionPointClass = { show: false, color: cc.Color.BLACK, size: 5 }; // 顯示項目和觸碰的碰撞點
+    private debugShowCardPointClass = { show: false, color: cc.Color.RED, size: 5 }; // 顯示項目和觸碰的碰撞點
 
     // 碰撞相關變數
     private readonly SPACING_OF_POINT_CARD = 70; // 卡片碰撞點的間距
@@ -66,14 +60,14 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private readonly COUNT_SCRAP_LIMIT = 5; // 碎屑更新偵數
 
     // 選項變數
-    private showCoin: boolean;
-    private showScrap: boolean;
-
+    private showCoin: boolean; // 控制是否顯示錢幣
+    private showScrap: boolean; // 控制是否顯示碎屑
     private items: Map<number, Collision>; // key: 放置位置, value:等待刮開的項目
     private itemHandler: IItemHandler;
     private imageScrap: cc.SpriteFrame;
-    private cardPoints: Collision; // 整張卡片的碰撞點(為了用來判斷碎屑產生)
+    private scrapPoints: Collision; // 整張卡片的碰撞點(為了用來判斷碎屑產生)
 
+    // 子節點
     private coinNode: cc.Node;
     private ticketNode: cc.Node;
     private maskNode: cc.Node;
@@ -84,6 +78,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private tmpScrapPoints: cc.Vec2[]; // 暫存有實際刮除到遮罩時的觸碰點
     private tmpCountShowCoin = 0; // 計時錢幣更新偵數
     private tmpCountShowScrap = 0; // 計時碎屑更新偵數
+    private coinMove: boolean; // 用來判斷是否需要更新錢幣節省效能
 
     init() {
         this.showCoin = false; // 預設不顯顯示硬幣
@@ -96,14 +91,14 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         this.tmpScrapPoints = [];
         this.tmpLastPoint = new cc.Vec2();
 
-        this.cardPoints = new Collision();
-        this.cardPoints.Collision = [];
-        this.cardPoints.Point = [];
+        this.scrapPoints = new Collision();
 
         this.ticketNode = this.node.getChildByName("ticket");
         this.maskNode = this.ticketNode.getChildByName("mask");
         this.coinNode = this.node.getChildByName("coin");
         this.coinNode.zIndex = 1; // 為了讓後續才加入的 node能夠顯示在 coin node底下
+        this.coinNode.x = -3000;// 初始化錢幣位置到畫面之外
+        this.coinNode.y = -3000;
 
         this.SetItems(null);
 
@@ -223,6 +218,9 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
 
                 tmpNode.rotation = item.rotation;
 
+                let collision = this.items.get(itemNumber);
+                collision.Total = 0;
+
                 for (let k = 0; k < tmpNode.children.length; k++) {
                     let tmpChildNode = tmpNode.children[k];
                     if (tmpChildNode.name != "tmpChildNode") {
@@ -232,9 +230,9 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
                     let worldPoint = tmpChildNode.parent.convertToWorldSpace(tmpChildNode.getPosition());
                     let point = this.ticketNode.convertToNodeSpaceAR(worldPoint);
 
-                    let collision = this.items.get(itemNumber);
-                    collision.Point.push(point);
-                    collision.Collision.push(false);
+
+                    collision.Points.add(point);
+                    collision.Total += 1;
 
                     if (this.debugShowItemPointClass.show) {
                         this.drawPointFunc(point.x, point.y, this.debugShowItemPointClass.color, this.debugShowItemPointClass.size, this.ticketNode); // 其他點
@@ -270,6 +268,8 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         // 初始化錢幣位置到畫面之外
         this.tmpLastPoint.x = -3000;
         this.tmpLastPoint.y = -3000;
+        this.coinNode.x = this.tmpLastPoint.x;
+        this.coinNode.y = this.tmpLastPoint.y;
 
         for (let i = 0; i < this.coinNode.children.length; i++) {
             this.coinNode.children[i].destroy();
@@ -290,6 +290,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
 
         this.coinNode.active = true;
+        this.coinMove = false;
     }
     private mouseLeave(event: cc.Event.EventMouse) {
         if (!this.showCoin) {
@@ -297,12 +298,15 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
 
         this.coinNode.active = false; // XXX 滑鼠移動到邊緣時會沒有關閉錢幣
+        this.coinMove = false;
     }
 
     private mouseMove(event: cc.Event.EventMouse) {
         if (!this.showCoin) {
             return;
         }
+
+        this.coinMove = true; // 避免不必要的更新節省效能
 
         let point = this.ticketNode.convertToNodeSpaceAR(event.getLocation());
 
@@ -331,8 +335,8 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
 
         this.tmpDrawPoints = [];
         this.tmpScrapPoints = [];
-        this.cardPoints.Collision = [];
-        this.cardPoints.Point = [];
+        this.scrapPoints.Points.clear();
+        this.scrapPoints.Total = 0;
 
         { // 產生卡片碰撞點
             let cardWidth = this.ticketNode.width;
@@ -342,8 +346,8 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
 
             for (let x = -cardWidthHalf; x <= cardWidthHalf; x += this.SPACING_OF_POINT_CARD) {
                 for (let y = -cardHeightHalf; y <= cardHeightHalf; y += this.SPACING_OF_POINT_CARD) {
-                    this.cardPoints.Point.push(new cc.Vec2(x, y));
-                    this.cardPoints.Collision.push(false);
+                    this.scrapPoints.Points.add(new cc.Vec2(x, y));
+                    this.scrapPoints.Total += 1;
 
                     if (this.debugShowCardPointClass.show) {
                         this.drawPointFunc(x, y, this.debugShowCardPointClass.color, this.debugShowCardPointClass.size, this.ticketNode);
@@ -354,7 +358,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     }
 
     protected update(dt: number): void {
-        if (this.showCoin) { // 更新錢幣位置
+        if (this.showCoin && this.coinMove) { // 更新錢幣位置
             this.tmpCountShowCoin += 1;
             if (this.tmpCountShowCoin >= this.COUNT_COIN_LIMIT) {
                 this.tmpCountShowCoin = 0;
@@ -386,7 +390,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
                     this.node.addChild(scrapNode)
 
                     let targetY = point.y - this.node.convertToWorldSpaceAR(point).y - scrapNode.height;
-                    let targetX = this.getRandomInt(20);
+                    let targetX = this.getRandomInt(40);
                     targetX *= (this.getRandomInt(2) == 0 ? 1 : -1);
                     targetX += scrapNode.x;
 
@@ -404,7 +408,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
     }
 
-    private clearByPos(touchAction: ETouchAction, touchPos: cc.Vec2) { // XXX 改善效能
+    private clearByPos(touchAction: ETouchAction, touchPos: cc.Vec2) { // FIXME 改善效能
         if (touchAction == ETouchAction.END) {
             this.tmpDrawPoints = [];
             return;
@@ -426,29 +430,32 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             return;
         }
 
-        let mask: any =  this.maskNode.getComponent(cc.Mask);
+        let mask: any = this.maskNode.getComponent(cc.Mask);
         let stencil: cc.Graphics = mask._graphics;
 
         // 每次判斷都判斷最新的位置, 之前的跳過節能效能
         let prevPos = this.tmpDrawPoints[this.tmpDrawPoints.length - 2];
         let curPos = this.tmpDrawPoints[this.tmpDrawPoints.length - 1];
 
-        // 暫存刮除時候掉碎屑的位置
-        for (let k = 0; k < this.cardPoints.Collision.length; k++) {
-            if (this.cardPoints.Collision[k]) {
-                continue;
-            }
+        if (this.scrapPoints.Points.size > 0) {// 處理刮除時候掉碎屑的位置
+            let self = this;
+            let tmpDelScrapPoints = new Set<cc.Vec2>();
 
-            let distance = this.getDistance(this.cardPoints.Point[k], curPos);
-            if (distance >= this.DIFF_COLLISION_CARD) { // 允許的碰撞誤差
-                continue;
-            }
+            this.scrapPoints.Points.forEach(function (scrapPoint) {
+                if (self.getDistance(scrapPoint, curPos) >= self.DIFF_COLLISION_CARD) { // 允許的碰撞誤差
+                    return;
+                }
 
-            this.cardPoints.Collision[k] = true;
+                tmpDelScrapPoints.add(scrapPoint);
 
-            if (this.showScrap) {
-                this.tmpScrapPoints.push(new cc.Vec2(this.cardPoints.Point[k].x, this.cardPoints.Point[k].y));
-            }
+                if (self.showScrap) {
+                    self.tmpScrapPoints.push(new cc.Vec2(scrapPoint.x, scrapPoint.y));
+                }
+            });
+
+            tmpDelScrapPoints.forEach(function (scrapPoint) {
+                self.scrapPoints.Points.delete(scrapPoint);
+            });
         }
 
         {// 刮除遮罩
@@ -494,35 +501,35 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             }
         }
 
+        let self = this;
+
         for (let i = 0; i < collisionPointsTouch.length; i++) {// 判斷項目消除百分比
             let touchPoint = collisionPointsTouch[i];
 
             for (let entry of Array.from(this.items.entries())) {
                 // let pos = entry[0]; // key
                 let item = entry[1]; // value
+                let tmpDelScrapPoints = new Set<cc.Vec2>();
 
-                for (let k = 0; k < item.Point.length; k++) {
-                    if (item.Collision[k]) {
-                        continue;
+                item.Points.forEach(function (itemPoint) {
+                    if (self.getDistance(itemPoint, touchPoint) >= self.DIFF_COLLISION_ITEM) { // 允許的碰撞誤差
+                        return;
                     }
 
-                    let itemPoint = item.Point[k];
+                    tmpDelScrapPoints.add(itemPoint);
 
-                    let distance = this.getDistance(itemPoint, touchPoint);
-                    if (distance >= this.DIFF_COLLISION_ITEM) { // 允許的碰撞誤差
-                        continue;
+                    if (self.itemHandler) {
+                        self.itemHandler.ItemListener(self.GetItems()); // callback刮除百分比
                     }
 
-                    item.Collision[k] = true;
-
-                    if (this.itemHandler) {
-                        this.itemHandler.ItemListener(this.GetItems()); // callback刮除百分比
+                    if (self.debugShowCollisionPointClass.show) {
+                        self.drawPointFunc(itemPoint.x, itemPoint.y, self.debugShowCollisionPointClass.color, self.debugShowCollisionPointClass.size, self.ticketNode);
                     }
+                });
 
-                    if (this.debugShowCollisionPointClass.show) {
-                        this.drawPointFunc(itemPoint.x, itemPoint.y, this.debugShowCollisionPointClass.color, this.debugShowCollisionPointClass.size, this.ticketNode);
-                    }
-                }
+                tmpDelScrapPoints.forEach(function (scrapPoint) {
+                    item.Points.delete(scrapPoint);
+                });
             }
         }
     }
