@@ -3,7 +3,7 @@ import { ScratchOffTicket, ETouchAction, IItemHandler, EAudioAction } from "./Sc
 const { ccclass, property } = cc._decorator;
 
 @ccclass
-export default class Sample02Main extends cc.Component { // TODO 要測試手機板和電腦版是否都正常操作
+export default class Sample02Main extends cc.Component {
     @property(cc.SpriteFrame)
     imageCoin: cc.SpriteFrame = null;
 
