@@ -29,14 +29,10 @@ export default class Sample02Main extends cc.Component {
 
     protected onLoad(): void {
         { // 初始化刮刮樂
+            let progressNode = this.node.getChildByName("progress");
             let ticketNode = this.node.getChildByName("ticket");
-
             this.scratchOffTicket = ticketNode.getComponent("ScratchOffTicket");
             this.scratchOffTicket.init();
-
-            let itemHandler: IItemHandler;
-
-            let progressNode = this.node.getChildByName("progress");
 
             let self = this;
 
@@ -94,17 +90,8 @@ export default class Sample02Main extends cc.Component {
             this.scratchOffTicket.SetItemHandler(new Methods());
         }
 
-        { // 設定刮刮樂錢幣
-            let coinNode = new cc.Node("CoinNode");
-            coinNode.anchorX = 0.18;
-            let sprite = coinNode.addComponent(cc.Sprite);
-            sprite.spriteFrame = this.imageCoin
-            this.scratchOffTicket.SetCoinNode(coinNode);
-        }
-
-        { // 設定刮刮樂刮除的動畫(已經刮除的區塊不會觸發產生粉末動畫)
-            this.scratchOffTicket.SetScrap(this.imageScraps);
-        }
+        this.scratchOffTicket.ShowCoin(true);
+        this.scratchOffTicket.ShowScrap(true);
 
         {
             let btnResetNode = this.node.getChildByName("btn").getChildByName("btnReset");

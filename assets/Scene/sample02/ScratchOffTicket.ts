@@ -35,12 +35,15 @@ interface IScratchOffTicket {
     SetItems(items: number[]);
     GetItems(): Map<number, number>;
     Scratch(touchAction: ETouchAction, pos: cc.Vec2);
-    SetCoinNode(node: cc.Node);
-    SetScrap(image: cc.SpriteFrame);
+    ShowCoin(show: boolean);
+    ShowScrap(show: boolean);
 }
 
 @ccclass
 export class ScratchOffTicket extends cc.Component implements IScratchOffTicket {
+
+    @property(cc.Prefab)
+    ScrapPrefab: cc.Prefab = null;
 
     // debug變數
     private debugShowTouchPointClass = { show: false, color: cc.Color.RED, size: 1 }; // 顯示觸碰產生的碰撞點
@@ -64,7 +67,6 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private showScrap: boolean; // 控制是否顯示碎屑
     private items: Map<number, Collision>; // key: 放置位置, value:等待刮開的項目
     private itemHandler: IItemHandler;
-    private imageScrap: cc.SpriteFrame;
     private scrapPoints: Collision; // 整張卡片的碰撞點(為了用來判斷碎屑產生)
 
     // 子節點
@@ -79,6 +81,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private tmpCountShowCoin = 0; // 計時錢幣更新偵數
     private tmpCountShowScrap = 0; // 計時碎屑更新偵數
     private coinMove: boolean; // 用來判斷是否需要更新錢幣節省效能
+    private scrapNodePool: cc.NodePool;
 
     init() {
         this.showCoin = false; // 預設不顯顯示硬幣
@@ -99,6 +102,18 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         this.coinNode.zIndex = 1; // 為了讓後續才加入的 node能夠顯示在 coin node底下
         this.coinNode.x = -3000;// 初始化錢幣位置到畫面之外
         this.coinNode.y = -3000;
+
+        {
+            this.scrapNodePool = new cc.NodePool();
+
+            let initCount = (this.ticketNode.width / this.SPACING_OF_POINT_CARD);
+            initCount += (this.ticketNode.height / this.SPACING_OF_POINT_CARD);
+
+            for (let i = 0; i < initCount; ++i) {
+                let node = cc.instantiate(this.ScrapPrefab);
+                this.scrapNodePool.put(node);
+            }
+        }
 
         this.SetItems(null);
 
@@ -262,26 +277,8 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         this.clearByPos(touchAction, pos);
     }
 
-    SetCoinNode(node: cc.Node) {
-        this.showCoin = false;
-
-        // 初始化錢幣位置到畫面之外
-        this.tmpLastPoint.x = -3000;
-        this.tmpLastPoint.y = -3000;
-        this.coinNode.x = this.tmpLastPoint.x;
-        this.coinNode.y = this.tmpLastPoint.y;
-
-        for (let i = 0; i < this.coinNode.children.length; i++) {
-            this.coinNode.children[i].destroy();
-        }
-
-        if (!node) {
-            return;
-        }
-
-        this.showCoin = true;
-
-        this.coinNode.addChild(node);
+    ShowCoin(show: boolean) {
+        this.showCoin = show;
     }
 
     private mouseEnter(event: cc.Event.EventMouse) {
@@ -314,15 +311,8 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         this.tmpLastPoint.y = point.y;
     }
 
-    SetScrap(image: cc.SpriteFrame) {
-        this.imageScrap = image;
-
-        if (!image) {
-            this.showScrap = false;
-            return;
-        }
-
-        this.showScrap = true;
+    ShowScrap(show: boolean) {
+        this.showScrap = show;
     }
 
     private restMask() {
@@ -357,6 +347,50 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
     }
 
+    private putScrapNode(node: cc.Node) {
+        if (!node) {
+            return;
+        }
+
+        this.scrapNodePool.put(node);
+    }
+
+    private getScrapNode(point: cc.Vec2): cc.Node {
+        let scrapNode = null;
+        if (this.scrapNodePool.size() > 0) {
+            scrapNode = this.scrapNodePool.get();
+        } else {
+            scrapNode = cc.instantiate(this.ScrapPrefab);
+        }
+
+        scrapNode.setPosition(point);
+        scrapNode.x = point.x + this.getRandomInt(20);
+        scrapNode.y = point.y;
+        scrapNode.scale = 1;
+        scrapNode.rotation = 0;
+
+        let targetY = point.y - this.node.convertToWorldSpaceAR(point).y - scrapNode.height;
+        let targetX = this.getRandomInt(40);
+        targetX *= (this.getRandomInt(2) == 0 ? 1 : -1);
+        targetX += scrapNode.x;
+
+        let targetScale = 1.5;
+
+        let self = this;
+        let tween = cc.tween(scrapNode);
+        tween.then(cc.tween()
+            .to(0.2, { scale: targetScale, position: new cc.Vec2(targetX, targetY) })
+            .call(() => {
+                scrapNode.parent = null;
+                self.putScrapNode(scrapNode);
+            })
+        );
+
+        tween.start();
+
+        return scrapNode;
+    }
+
     protected update(dt: number): void {
         if (this.showCoin && this.coinMove) { // 更新錢幣位置
             this.tmpCountShowCoin += 1;
@@ -378,31 +412,8 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
 
                 for (let k = 0; k < scrapPointsLength; k++) {
                     let point = this.tmpScrapPoints.shift();
-
-                    let scrapNode = new cc.Node("scrapNode"); // XXX prefab改善效能
-                    scrapNode.setContentSize(this.imageScrap.getRect().size);
-                    scrapNode.setPosition(point);
-                    scrapNode.x = point.x + this.getRandomInt(20);
-                    scrapNode.y = point.y;
-                    scrapNode.scale = 1;
-                    scrapNode.rotation = 0;
-                    scrapNode.addComponent(cc.Sprite).spriteFrame = this.imageScrap;
+                    let scrapNode = this.getScrapNode(point);
                     this.node.addChild(scrapNode)
-
-                    let targetY = point.y - this.node.convertToWorldSpaceAR(point).y - scrapNode.height;
-                    let targetX = this.getRandomInt(40);
-                    targetX *= (this.getRandomInt(2) == 0 ? 1 : -1);
-                    targetX += scrapNode.x;
-
-                    let targetScale = 1.5;
-
-                    let tween = cc.tween(scrapNode);
-                    tween.then(cc.tween()
-                        .to(0.2, { scale: targetScale, position: new cc.Vec2(targetX, targetY) })
-                        .call(() => { scrapNode.destroy(); })
-                    );
-
-                    tween.start();
                 }
             }
         }
@@ -466,8 +477,8 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             stencil.stroke();
         }
 
-        let collisionPointsTouch: cc.Vec2[] = [];
-        {// 產生判斷點  // XXX 有時候刮除轉彎時會漏掉部分碰撞點沒有產生
+        let collisionPointsTouch: cc.Vec2[] = []; // XXX 有時候刮除轉彎時會漏掉部分碰撞點沒有產生
+        {// 產生判斷點  
             let diff = (this.getDistance(curPos, prevPos) / this.SPACING_OF_POINT_TOUCH) - 2;
             let count = (diff < 0 ? 0 : diff);
             let arr: cc.Vec2[] = [];
