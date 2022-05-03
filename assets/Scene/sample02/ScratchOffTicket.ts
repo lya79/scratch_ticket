@@ -1,9 +1,8 @@
 const { ccclass, property } = cc._decorator;
 
 export enum ETouchAction {
-    START,
-    MOVE,
     END,
+    MOVE,
 }
 
 export enum EAudioAction {
@@ -34,9 +33,12 @@ interface IScratchOffTicket {
     SetItemHandler(itemHandler: IItemHandler);
     SetItems(items: number[]);
     GetItems(): Map<number, number>;
-    Scratch(touchAction: ETouchAction, pos: cc.Vec2);
-    ShowCoin(show: boolean);
-    ShowScrap(show: boolean);
+    ScratchAll();
+    Scratch(touchAction: ETouchAction, pos: cc.Vec2, lineWidth: number);
+    SetShowCoin(show: boolean);
+    SetShowScrap(show: boolean);
+    SetLock(lock: boolean);
+    IsLock(): boolean;
 }
 
 @ccclass
@@ -55,8 +57,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private readonly SPACING_OF_POINT_CARD = 70; // 卡片碰撞點的間距
     private readonly SPACING_OF_POINT_ITEM = 10; // 項目判斷點產生的間距
     private readonly SPACING_OF_POINT_TOUCH = 10; // 刮除線段的碰撞點間距
-    private readonly LENGTH_LINE_TOUCH = 50; // 線段長度
-    private readonly LENGTH_LINE_TOUCH_21 = (50 / 2); // 線段長度的一半
+    private readonly LENGTH_LINE_TOUCH = 55; // 線段長度
     private readonly DIFF_COLLISION_ITEM = 10; // 觸碰點和項目點之間允許的碰撞誤差
     private readonly DIFF_COLLISION_CARD = 30; // 觸碰點和卡片點之間允許的碰撞誤差
     private readonly COUNT_COIN_LIMIT = 2; // 錢幣更新偵數
@@ -65,6 +66,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     // 選項變數
     private showCoin: boolean; // 控制是否顯示錢幣
     private showScrap: boolean; // 控制是否顯示碎屑
+    private lockScrap: boolean; // 控制是否使用手動刮除
     private items: Map<number, Collision>; // key: 放置位置, value:等待刮開的項目
     private itemHandler: IItemHandler;
     private scrapPoints: Collision; // 整張卡片的碰撞點(為了用來判斷碎屑產生)
@@ -80,19 +82,19 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private tmpScrapPoints: cc.Vec2[]; // 暫存有實際刮除到遮罩時的觸碰點
     private tmpCountShowCoin = 0; // 計時錢幣更新偵數
     private tmpCountShowScrap = 0; // 計時碎屑更新偵數
-    private coinMove: boolean; // 用來判斷是否需要更新錢幣節省效能
     private scrapNodePool: cc.NodePool;
 
     init() {
         this.showCoin = false; // 預設不顯顯示硬幣
         this.showScrap = false; // 預設不顯示碎屑
+        this.lockScrap = false; // 預設不禁止使用手動刮除
 
         this.items = new Map<number, Collision>();
         this.itemHandler = null;
 
         this.tmpDrawPoints = [];
         this.tmpScrapPoints = [];
-        this.tmpLastPoint = new cc.Vec2();
+        this.tmpLastPoint = new cc.Vec2(-3000, -3000);
 
         this.scrapPoints = new Collision();
 
@@ -118,12 +120,10 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         this.SetItems(null);
 
         if (cc.sys.isMobile) {
-            this.node.on(cc.Node.EventType.TOUCH_START, this.mouseEnter, this);
             this.node.on(cc.Node.EventType.TOUCH_END, this.mouseLeave, this);
             this.node.on(cc.Node.EventType.TOUCH_CANCEL, this.mouseLeave, this);
             this.node.on(cc.Node.EventType.TOUCH_MOVE, this.mouseMove, this);
         } else {
-            this.node.on(cc.Node.EventType.MOUSE_ENTER, this.mouseEnter, this);
             this.node.on(cc.Node.EventType.MOUSE_LEAVE, this.mouseLeave, this);
             this.node.on(cc.Node.EventType.MOUSE_MOVE, this.mouseMove, this);
         }
@@ -131,12 +131,10 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
 
     protected onDestroy(): void {
         if (cc.sys.isMobile) {
-            this.node.off(cc.Node.EventType.TOUCH_START, this.mouseEnter, this);
             this.node.off(cc.Node.EventType.TOUCH_END, this.mouseLeave, this);
             this.node.off(cc.Node.EventType.TOUCH_CANCEL, this.mouseLeave, this);
             this.node.off(cc.Node.EventType.TOUCH_MOVE, this.mouseMove, this);
         } else {
-            this.node.off(cc.Node.EventType.MOUSE_ENTER, this.mouseEnter, this);
             this.node.off(cc.Node.EventType.MOUSE_LEAVE, this.mouseLeave, this);
             this.node.off(cc.Node.EventType.MOUSE_MOVE, this.mouseMove, this);
         }
@@ -165,6 +163,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
 
         if (this.items.size <= 0) {
+            this.ticketNode.active = true;
             return;
         }
 
@@ -190,75 +189,75 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             sprite.spriteFrame = handler;
         }
 
-        {
-            for (let i = 0; i < itemsNode.children.length; i++) {
-                let item = itemsNode.children[i];
-                if (!item.active) {
+        for (let i = 0; i < itemsNode.children.length; i++) {
+            let item = itemsNode.children[i];
+            if (!item.active) {
+                continue;
+            }
+
+            let itemNumber = Number(item.name.substring(4));
+
+            if (isNaN(itemNumber)) {
+                continue;
+            }
+
+            if (!this.items.has(itemNumber)) {
+                continue;
+            }
+
+            let worldPoint = item.parent.convertToWorldSpace(item.getPosition());
+            let centerPoint = this.ticketNode.convertToNodeSpaceAR(worldPoint);
+
+            if (this.debugShowItemPointClass.show) {
+                this.drawPointFunc(centerPoint.x, centerPoint.y, this.debugShowItemPointClass.color, this.debugShowItemPointClass.size, this.ticketNode); // 中心點
+            }
+
+            let tmpNode = new cc.Node("tmpNode");
+            tmpNode.width = item.width * item.scaleX;
+            tmpNode.height = item.height * item.scaleY;
+            tmpNode.setPosition(centerPoint.x, centerPoint.y);
+
+            this.ticketNode.addChild(tmpNode);
+
+            for (let k = 0; k <= tmpNode.width; k += this.SPACING_OF_POINT_ITEM) {
+                for (let m = 0; m <= tmpNode.height; m += this.SPACING_OF_POINT_ITEM) {
+                    let tmpChildNode = new cc.Node("tmpChildNode");
+                    tmpChildNode.setPosition(k, m);
+                    tmpChildNode.setContentSize(1, 1);
+
+                    tmpNode.addChild(tmpChildNode);
+                }
+            }
+
+            tmpNode.rotation = item.rotation;
+
+            let collision = this.items.get(itemNumber);
+            collision.Total = 0;
+
+            for (let k = 0; k < tmpNode.children.length; k++) {
+                let tmpChildNode = tmpNode.children[k];
+                if (tmpChildNode.name != "tmpChildNode") {
                     continue;
                 }
 
-                let itemNumber = Number(item.name.substring(4));
+                let worldPoint = tmpChildNode.parent.convertToWorldSpace(tmpChildNode.getPosition());
+                let point = this.ticketNode.convertToNodeSpaceAR(worldPoint);
 
-                if (isNaN(itemNumber)) {
-                    continue;
-                }
 
-                if (!this.items.has(itemNumber)) {
-                    continue;
-                }
-
-                let worldPoint = item.parent.convertToWorldSpace(item.getPosition());
-                let centerPoint = this.ticketNode.convertToNodeSpaceAR(worldPoint);
+                collision.Points.add(point);
+                collision.Total += 1;
 
                 if (this.debugShowItemPointClass.show) {
-                    this.drawPointFunc(centerPoint.x, centerPoint.y, this.debugShowItemPointClass.color, this.debugShowItemPointClass.size, this.ticketNode); // 中心點
+                    this.drawPointFunc(point.x, point.y, this.debugShowItemPointClass.color, this.debugShowItemPointClass.size, this.ticketNode); // 其他點
                 }
 
-                let tmpNode = new cc.Node("tmpNode");
-                tmpNode.width = item.width * item.scaleX;
-                tmpNode.height = item.height * item.scaleY;
-                tmpNode.setPosition(centerPoint.x, centerPoint.y);
-
-                this.ticketNode.addChild(tmpNode);
-
-                for (let k = 0; k <= tmpNode.width; k += this.SPACING_OF_POINT_ITEM) {
-                    for (let m = 0; m <= tmpNode.height; m += this.SPACING_OF_POINT_ITEM) {
-                        let tmpChildNode = new cc.Node("tmpChildNode");
-                        tmpChildNode.setPosition(k, m);
-                        tmpChildNode.setContentSize(1, 1);
-
-                        tmpNode.addChild(tmpChildNode);
-                    }
-                }
-
-                tmpNode.rotation = item.rotation;
-
-                let collision = this.items.get(itemNumber);
-                collision.Total = 0;
-
-                for (let k = 0; k < tmpNode.children.length; k++) {
-                    let tmpChildNode = tmpNode.children[k];
-                    if (tmpChildNode.name != "tmpChildNode") {
-                        continue;
-                    }
-
-                    let worldPoint = tmpChildNode.parent.convertToWorldSpace(tmpChildNode.getPosition());
-                    let point = this.ticketNode.convertToNodeSpaceAR(worldPoint);
-
-
-                    collision.Points.add(point);
-                    collision.Total += 1;
-
-                    if (this.debugShowItemPointClass.show) {
-                        this.drawPointFunc(point.x, point.y, this.debugShowItemPointClass.color, this.debugShowItemPointClass.size, this.ticketNode); // 其他點
-                    }
-
-                    tmpChildNode.destroy();
-                }
-
-                tmpNode.destroy();
+                tmpChildNode.destroy();
             }
+
+            tmpNode.destroy();
         }
+
+        this.ticketNode.active = true;
     }
 
     GetItems(): Map<number, number> {
@@ -273,29 +272,42 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         return m;
     }
 
-    Scratch(touchAction: ETouchAction, pos: cc.Vec2) {
-        this.clearByPos(touchAction, pos);
+    ScratchAll() {
+        this.ticketNode.active = false;
+
+        for (let entry of Array.from(this.items.entries())) {
+            // let pos = entry[0]; // key
+            let item = entry[1]; // value
+            item.Points.clear();
+        }
+
+        if (this.itemHandler) {
+            this.itemHandler.ItemListener(this.GetItems()); // callback刮除百分比
+        }
     }
 
-    ShowCoin(show: boolean) {
+    Scratch(touchAction: ETouchAction, pos: cc.Vec2, lineWidth: number) {
+        this.clearByPos(touchAction, pos, lineWidth);
+    }
+
+    SetShowCoin(show: boolean) {
         this.showCoin = show;
     }
 
-    private mouseEnter(event: cc.Event.EventMouse) {
-        if (!this.showCoin) {
-            return;
-        }
-
-        this.coinNode.active = true;
-        this.coinMove = false;
-    }
     private mouseLeave(event: cc.Event.EventMouse) {
         if (!this.showCoin) {
             return;
         }
 
-        this.coinNode.active = false; // XXX 滑鼠移動到邊緣時會沒有關閉錢幣
-        this.coinMove = false;
+        if (this.lockScrap) {
+            return;
+        }
+
+        if (!this.ticketNode.active) {
+            return;
+        }
+
+        this.updateCoinPos(null); // XXX 滑鼠移動到邊緣時會沒有關閉錢幣
     }
 
     private mouseMove(event: cc.Event.EventMouse) {
@@ -303,15 +315,56 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             return;
         }
 
-        this.coinMove = true; // 避免不必要的更新節省效能
+        if (this.lockScrap) {
+            return;
+        }
 
-        let point = this.ticketNode.convertToNodeSpaceAR(event.getLocation());
+        if (!this.ticketNode.active) {
+            return;
+        }
 
-        this.tmpLastPoint.x = point.x;
-        this.tmpLastPoint.y = point.y;
+        let pos = this.ticketNode.convertToNodeSpaceAR(event.getLocation());
+        this.updateCoinPos(pos);
+
+        // this.tmpLastPoint.x = pos.x;
+        // this.tmpLastPoint.y = pos.y;
+
+        // if (!this.coinNode.active) {
+        //     this.coinNode.setPosition(this.tmpLastPoint.x, this.tmpLastPoint.y);
+        // }
+
+        // this.coinNode.active = true;
     }
 
-    ShowScrap(show: boolean) {
+    SetLock(lock: boolean) {
+        if (lock != this.lockScrap) {
+            cc.log("auto scrap: " + lock);
+        }
+
+        this.lockScrap = lock;
+    }
+
+    IsLock(): boolean {
+        return this.lockScrap;
+    }
+
+    private updateCoinPos(pos: cc.Vec2) {
+        if (!pos) {
+            this.coinNode.active = false;
+            return;
+        }
+
+        this.tmpLastPoint.x = pos.x;
+        this.tmpLastPoint.y = pos.y;
+
+        if (!this.coinNode.active) {
+            this.coinNode.setPosition(this.tmpLastPoint.x, this.tmpLastPoint.y);
+        }
+
+        this.coinNode.active = true;
+    }
+
+    SetShowScrap(show: boolean) {
         this.showScrap = show;
     }
 
@@ -392,7 +445,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     }
 
     protected update(dt: number): void {
-        if (this.showCoin && this.coinMove) { // 更新錢幣位置
+        if (this.showCoin && this.coinNode.active) { // 更新錢幣位置
             this.tmpCountShowCoin += 1;
             if (this.tmpCountShowCoin >= this.COUNT_COIN_LIMIT) {
                 this.tmpCountShowCoin = 0;
@@ -419,9 +472,14 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
     }
 
-    private clearByPos(touchAction: ETouchAction, touchPos: cc.Vec2) { // FIXME 改善效能
+    private clearByPos(touchAction: ETouchAction, touchPos: cc.Vec2, lineWidth: number) { // XXX 改善效能
+        if (!this.ticketNode.active) {
+            return;
+        }
+
         if (touchAction == ETouchAction.END) {
             this.tmpDrawPoints = [];
+            this.coinNode.active = false;
             return;
         }
 
@@ -439,6 +497,10 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
 
         if (this.tmpDrawPoints.length <= 1) {
             return;
+        }
+
+        if (this.IsLock()) { // 手動被關閉使用時會自動顯示錢幣
+            this.updateCoinPos(pos);
         }
 
         let mask: any = this.maskNode.getComponent(cc.Mask);
@@ -469,10 +531,13 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             });
         }
 
+        let tmpLineWidth = (lineWidth > this.LENGTH_LINE_TOUCH ? lineWidth : this.LENGTH_LINE_TOUCH);
+        let tmpLineWidth21 = (tmpLineWidth / 2);
+
         {// 刮除遮罩
             stencil.moveTo(prevPos.x, prevPos.y);
             stencil.lineTo(curPos.x, curPos.y);
-            stencil.lineWidth = this.LENGTH_LINE_TOUCH;
+            stencil.lineWidth = tmpLineWidth;
             stencil.strokeColor = cc.color(255, 255, 255, 255);
             stencil.stroke();
         }
@@ -493,7 +558,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
                 let rotation = obj.rotation;
 
                 if (!isNaN(rotation) && rotation == 0) {
-                    for (let i = (tmpCurPos.x - this.LENGTH_LINE_TOUCH_21); i <= (tmpCurPos.x + this.LENGTH_LINE_TOUCH_21); i += this.SPACING_OF_POINT_TOUCH) {
+                    for (let i = (tmpCurPos.x - tmpLineWidth21); i <= (tmpCurPos.x + tmpLineWidth21); i += this.SPACING_OF_POINT_TOUCH) {
                         collisionPointsTouch.push(new cc.Vec2(i, tmpCurPos.y));
 
                         if (this.debugShowTouchPointClass.show) {// 顯示碰撞的點
@@ -501,7 +566,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
                         }
                     }
                 } else {
-                    for (let i = (tmpCurPos.y - this.LENGTH_LINE_TOUCH_21); i <= (tmpCurPos.y + this.LENGTH_LINE_TOUCH_21); i += this.SPACING_OF_POINT_TOUCH) {
+                    for (let i = (tmpCurPos.y - tmpLineWidth21); i <= (tmpCurPos.y + tmpLineWidth21); i += this.SPACING_OF_POINT_TOUCH) {
                         collisionPointsTouch.push(new cc.Vec2(tmpCurPos.x, i));
 
                         if (this.debugShowTouchPointClass.show) {// 顯示碰撞的點
