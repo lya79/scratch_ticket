@@ -1,8 +1,7 @@
-import { ScratchOffTicket, ETouchAction, IItemHandler, EAudioAction } from "./ScratchOffTicket";
+import { IScratchOffTicket, ScratchOffTicket, ETouchAction, IItemHandler, EAudioAction } from "./ScratchOffTicket";
 
 const { ccclass, property } = cc._decorator;
 
-// TODO 回應 item 1~n的全部世界座標(特殊獎項需要做動畫會用到座標)
 @ccclass
 export default class Sample02Main extends cc.Component {
     @property(cc.SpriteFrame)
@@ -26,14 +25,14 @@ export default class Sample02Main extends cc.Component {
     @property({ type: cc.AudioClip })
     audioScratch: cc.AudioClip[] = [];
 
-    private scratchOffTicket: ScratchOffTicket;
+    private scratchOffTicket: IScratchOffTicket;
 
     protected onLoad(): void {
         { // 初始化刮刮樂
             let progressNode = this.node.getChildByName("progress");
             let ticketNode = this.node.getChildByName("ticket");
             this.scratchOffTicket = ticketNode.getComponent("ScratchOffTicket");
-            this.scratchOffTicket.init();
+            this.scratchOffTicket.Init();
 
             let self = this;
 

@@ -1,17 +1,38 @@
 const { ccclass, property } = cc._decorator;
 
 export enum ETouchAction {
+    /**
+     * 刮除結束
+     */
     END,
+
+    /**
+     * 刮除進行中
+     */
     MOVE,
 }
 
 export enum EAudioAction {
+    /**
+     * 刮除音效
+     */
     SCRATCH,
 }
 
 export interface IItemHandler {
+    /**
+     * callback獎項刮除百分比
+     */
     ItemListener: (items: Map<number, number>) => void;
+
+    /**
+     * callback獎項位置對應的圖片
+     */
     GetImageHandler: (pos: number) => cc.SpriteFrame;
+
+    /**
+     * callback播放音效
+     */
     PlayAudio: (action: EAudioAction) => void;
 }
 
@@ -29,14 +50,54 @@ class Collision {
     }
 }
 
-interface IScratchOffTicket {
+export interface IScratchOffTicket {
+    /**
+     * 初始化
+     */
+    Init();
+
+    /**
+     * callback使用
+     * @param itemHandler 
+     */
     SetItemHandler(itemHandler: IItemHandler);
+
+    /**
+     * 重置獎項和刮刮卡
+     * @param items 
+     */
     SetItems(items: number[]);
     GetItems(): Map<number, number>;
+
+    /**
+     * 全部刮除
+     */
     ScratchAll();
+
+    /**
+     * 手動刮除和自動刮除
+     * @param touchAction 
+     * @param pos 
+     * @param lineWidth 
+     */
     Scratch(touchAction: ETouchAction, pos: cc.Vec2, lineWidth: number);
+
+    /**
+     * 控制是否顯示錢幣
+     * @param show 
+     */
     SetShowCoin(show: boolean);
+
+    /**
+     * 控制是否顯示碎屑和音效
+     * @param show 
+     */
     SetShowScrap(show: boolean);
+
+    /**
+     * 控制是否可以手動刮除
+     * @param lock true:禁止手動刮除刮除, false:可以手動刮除
+     */
     SetLock(lock: boolean);
     IsLock(): boolean;
 }
@@ -48,17 +109,17 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     ScrapPrefab: cc.Prefab = null;
 
     // debug變數
-    private debugShowTouchPointClass = { show: false, color: cc.Color.RED, size: 1 }; // 顯示觸碰產生的碰撞點
+    private debugShowTouchPointClass = { show: false, color: cc.Color.RED, size: 3 }; // 顯示觸碰產生的碰撞點
     private debugShowItemPointClass = { show: false, color: cc.Color.BLUE, size: 3 }; // 顯示項目的碰撞點
-    private debugShowCollisionPointClass = { show: false, color: cc.Color.BLACK, size: 5 }; // 顯示項目和觸碰的碰撞點
-    private debugShowCardPointClass = { show: false, color: cc.Color.RED, size: 5 }; // 顯示項目和觸碰的碰撞點
+    private debugShowCollisionPointClass = { show: false, color: cc.Color.BLACK, size: 3 }; // 顯示項目和觸碰的碰撞點
+    private debugShowCardPointClass = { show: false, color: cc.Color.RED, size: 3 }; // 顯示項目和觸碰的碰撞點
 
     // 碰撞相關變數
     private readonly SPACING_OF_POINT_CARD = 70; // 卡片碰撞點的間距
     private readonly SPACING_OF_POINT_ITEM = 10; // 項目判斷點產生的間距
     private readonly SPACING_OF_POINT_TOUCH = 10; // 刮除線段的碰撞點間距
     private readonly LENGTH_LINE_TOUCH = 55; // 線段長度
-    private readonly DIFF_COLLISION_ITEM = 10; // 觸碰點和項目點之間允許的碰撞誤差
+    private readonly DIFF_COLLISION_ITEM = 12; // 觸碰點和項目點之間允許的碰撞誤差
     private readonly DIFF_COLLISION_CARD = 30; // 觸碰點和卡片點之間允許的碰撞誤差
     private readonly COUNT_COIN_LIMIT = 2; // 錢幣更新偵數
     private readonly COUNT_SCRAP_LIMIT = 5; // 碎屑更新偵數
@@ -66,7 +127,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     // 選項變數
     private showCoin: boolean; // 控制是否顯示錢幣
     private showScrap: boolean; // 控制是否顯示碎屑
-    private lockScrap: boolean; // 控制是否使用手動刮除
+    private lockScratch: boolean; // 控制是否使用手動刮除
     private items: Map<number, Collision>; // key: 放置位置, value:等待刮開的項目
     private itemHandler: IItemHandler;
     private scrapPoints: Collision; // 整張卡片的碰撞點(為了用來判斷碎屑產生)
@@ -84,10 +145,10 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     private tmpCountShowScrap = 0; // 計時碎屑更新偵數
     private scrapNodePool: cc.NodePool;
 
-    init() {
+    Init() {
         this.showCoin = false; // 預設不顯顯示硬幣
         this.showScrap = false; // 預設不顯示碎屑
-        this.lockScrap = false; // 預設不禁止使用手動刮除
+        this.lockScratch = false; // 預設不禁止使用手動刮除
 
         this.items = new Map<number, Collision>();
         this.itemHandler = null;
@@ -286,10 +347,6 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
     }
 
-    Scratch(touchAction: ETouchAction, pos: cc.Vec2, lineWidth: number) {
-        this.clearByPos(touchAction, pos, lineWidth);
-    }
-
     SetShowCoin(show: boolean) {
         this.showCoin = show;
     }
@@ -299,7 +356,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             return;
         }
 
-        if (this.lockScrap) {
+        if (this.lockScratch) {
             return;
         }
 
@@ -315,7 +372,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             return;
         }
 
-        if (this.lockScrap) {
+        if (this.lockScratch) {
             return;
         }
 
@@ -337,15 +394,15 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
     }
 
     SetLock(lock: boolean) {
-        if (lock != this.lockScrap) {
-            cc.log("auto scrap: " + lock);
+        if (lock != this.lockScratch) {
+            cc.log("lockScratch: " + lock);
         }
 
-        this.lockScrap = lock;
+        this.lockScratch = lock;
     }
 
     IsLock(): boolean {
-        return this.lockScrap;
+        return this.lockScratch;
     }
 
     private updateCoinPos(pos: cc.Vec2) {
@@ -472,7 +529,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         }
     }
 
-    private clearByPos(touchAction: ETouchAction, touchPos: cc.Vec2, lineWidth: number) { // XXX 改善效能
+    Scratch(touchAction: ETouchAction, touchPos: cc.Vec2, lineWidth: number) { // XXX 改善效能
         if (!this.ticketNode.active) {
             return;
         }
@@ -542,7 +599,7 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             stencil.stroke();
         }
 
-        let collisionPointsTouch: cc.Vec2[] = []; // XXX 有時候刮除轉彎時會漏掉部分碰撞點沒有產生
+        let collisionPointsTouch: cc.Vec2[] = [];
         {// 產生判斷點  
             let diff = (this.getDistance(curPos, prevPos) / this.SPACING_OF_POINT_TOUCH) - 2;
             let count = (diff < 0 ? 0 : diff);
@@ -661,22 +718,18 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
         return Math.sqrt(x * x + y * y);
     }
 
-    private bezierCalculate(poss, precision) { // 包含頭尾
+    private bezierCalculate(poss: cc.Vec2[], precision) { // 包含頭尾
         precision -= 1;
 
-        //维度，坐标轴数（二维坐标，三维坐标...）
         let dimersion = 2;
 
-        //贝塞尔曲线控制点数（阶数）
         let number = poss.length;
 
-        //控制点数不小于 2 ，至少为二维坐标系
         if (number < 2 || dimersion < 2)
             return null;
 
         let result = new Array();
 
-        //计算杨辉三角
         let mi = new Array();
         mi[0] = mi[1] = 1;
         for (let i = 3; i <= number; i++) {
@@ -692,7 +745,6 @@ export class ScratchOffTicket extends cc.Component implements IScratchOffTicket 
             }
         }
 
-        //计算坐标点
         for (let i = 0; i <= precision; i++) {
             let t = i / precision;
             // let p = new Point(0, 0);
