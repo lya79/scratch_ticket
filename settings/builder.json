@@ -15,9 +15,7 @@
     "subContext": ""
   },
   "encryptJs": true,
-  "excludeScenes": [
-    "9e301c5c-e291-40ce-9146-b166f564d29e"
-  ],
+  "excludeScenes": [],
   "fb-instant-games": {},
   "includeSDKBox": false,
   "inlineSpriteFrames": true,
@@ -37,7 +35,7 @@
     "orientation": "portrait",
     "zip": false
   },
-  "startScene": "2d2f792f-a40c-49bb-a189-ed176a246e49",
+  "startScene": "ce5c498b-1b31-4757-972c-9ffca02e1575",
   "title": "hello_world",
   "webOrientation": "auto",
   "wechatgame": {
